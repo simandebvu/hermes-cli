@@ -437,9 +437,9 @@ Hermes prefers the safest path, even if it takes one more step.
 
 ## Documentation
 
-- **[Integration Guide](INTEGRATION.md)** - How GitHub Copilot CLI powers Hermes
-- **[Development Guide](DEVELOPMENT.md)** - Contributing and extending Hermes
-- **[Setup Complete](SETUP_COMPLETE.md)** - Quick reference and testing guide
+- **[Integration Guide](docs/INTEGRATION.md)** - How GitHub Copilot CLI powers Hermes
+- **[Development Guide](docs/DEVELOPMENT.md)** - Contributing and extending Hermes
+- **[Changelog](docs/CHANGELOG.md)** - Version history and releases
 
 ---
 
@@ -538,7 +538,7 @@ bun run typecheck
 ## FAQ
 
 **Q: Does Hermes send my code to AI services?**
-A: Only repository state metadata (branch names, file lists, status) is sent. File contents are not transmitted unless explicitly needed for conflict resolution. See [SECURITY.md](SECURITY.md) for details.
+A: Only repository state metadata (branch names, file lists, status) is sent. File contents are not transmitted unless explicitly needed for conflict resolution. See [SECURITY.md](docs/SECURITY.md) for details.
 
 **Q: Does Hermes require a GitHub Copilot subscription?**
 A: Yes. Hermes uses the GitHub Copilot CLI, which requires an active Copilot subscription.
@@ -580,11 +580,13 @@ Real-world time savings reported by users:
 - ✅ Team-shareable configuration
 - ✅ Time-saved tracking
 
-### Planned (v0.3)
+### Next (v0.3)
 - [ ] `hermes undo` - Revert last operation safely
 - [ ] Auto-backup system before risky operations
 - [ ] Ticket integration (Linear, Jira)
 - [ ] `--dry-run` flag for all commands
+
+See [PRODUCT_VISION.md](docs/PRODUCT_VISION.md) for full roadmap.
 
 ### Future
 - [ ] `hermes review` - PR review assistance
@@ -623,6 +625,6 @@ In Greek mythology, **Hermes** is the guide of travelers and the messenger betwe
 
 **Made with 🪽 by developers, for developers**
 
-[Report Bug](https://github.com/yourusername/hermes/issues) • [Request Feature](https://github.com/yourusername/hermes/issues) • [Documentation](INTEGRATION.md)
+[Report Bug](https://github.com/simandebvu/hermes-cli/issues) • [Request Feature](https://github.com/simandebvu/hermes-cli/issues) • [Documentation](docs/INTEGRATION.md)
 
 </div>

@@ -1,11 +1,17 @@
 {
   "name": "hermes-git",
   "version": "0.2.0",
-  "description": "Intent-driven Git, guided by AI",
+  "description": "Intent-driven Git, guided by AI. Turn natural language into safe, explainable Git operations.",
   "type": "module",
+  "main": "./dist/index.js",
   "bin": {
     "hermes": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target node --format esm",
     "dev": "bun run src/index.ts",
@@ -17,9 +23,21 @@
     "cli",
     "ai",
     "copilot",
-    "developer-tools"
+    "developer-tools",
+    "productivity",
+    "github-copilot",
+    "git-workflow",
+    "developer-experience"
   ],
-  "author": "",
+  "author": "Simbarashe Mandebvu",
+  "homepage": "https://github.com/simandebvu/hermes-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simandebvu/hermes-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/simandebvu/hermes-cli/issues"
+  },
   "license": "MIT",
   "dependencies": {
     "commander": "^12.1.0",
