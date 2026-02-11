@@ -64,7 +64,19 @@ export function startCommand(program: Command) {
         // Execute commands
         if (plan.commands && Array.isArray(plan.commands)) {
           for (const command of plan.commands) {
-            const cmdString = typeof command === 'string' ? command : String(command);
+            // Handle both string commands and object commands
+            let cmdString: string;
+            if (typeof command === 'string') {
+              cmdString = command;
+            } else if (typeof command === 'object' && command.command) {
+              cmdString = command.command;
+            } else if (typeof command === 'object' && command.cmd) {
+              cmdString = command.cmd;
+            } else {
+              console.warn('⚠️  Skipping invalid command:', command);
+              continue;
+            }
+
             displayStep(cmdString);
             await executeGitCommand(cmdString);
             gitCommandsRun++;
