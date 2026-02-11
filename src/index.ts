@@ -16,7 +16,7 @@ const program = new Command();
 program
   .name('hermes')
   .description('🪽 Intent-driven Git, guided by AI')
-  .version('0.2.0');
+  .version('0.2.1');
 
 // Register commands
 initCommand(program);
