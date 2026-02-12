@@ -1,10 +1,14 @@
 import { Command } from 'commander';
-import { getRepoState } from '../lib/git.js';
+import { getRepoState, isGitInstalled, isGitRepository, hasCommits, executeGitCommand } from '../lib/git.js';
 import { displaySuccess } from '../lib/display.js';
 import inquirer from 'inquirer';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 interface HermesConfig {
   version: string;
@@ -42,6 +46,44 @@ export function initCommand(program: Command) {
       try {
         console.log('🪽 Initializing Hermes for this repository...\n');
 
+        // Check if Git is installed
+        if (!(await isGitInstalled())) {
+          console.error('❌ Error: Git is not installed');
+          console.log('Please install Git and try again.');
+          process.exit(1);
+        }
+
+        // Check if this is a Git repository
+        const isRepo = await isGitRepository();
+        if (!isRepo) {
+          console.log('⚠️  This directory is not a Git repository.\n');
+
+          if (options.quick) {
+            // In quick mode, automatically initialize git
+            console.log('Running: git init');
+            await execAsync('git init');
+            console.log('✓ Git repository initialized\n');
+          } else {
+            // Ask user if they want to initialize git
+            const { initGit } = await inquirer.prompt([
+              {
+                type: 'confirm',
+                name: 'initGit',
+                message: 'Would you like to initialize a Git repository?',
+                default: true,
+              },
+            ]);
+
+            if (!initGit) {
+              console.log('Cancelled. Please run this command in a Git repository.');
+              process.exit(1);
+            }
+
+            await execAsync('git init');
+            console.log('✓ Git repository initialized\n');
+          }
+        }
+
         // Check if already initialized
         if (existsSync('.hermes/config.json')) {
           const { overwrite } = await inquirer.prompt([
@@ -59,16 +101,32 @@ export function initCommand(program: Command) {
           }
         }
 
-        const repoState = await getRepoState();
+        // Determine current branch or use default
+        let currentBranch = 'main';
+        const hasAnyCommits = await hasCommits();
+
+        if (hasAnyCommits) {
+          // If there are commits, get the actual current branch
+          const repoState = await getRepoState();
+          currentBranch = repoState.currentBranch;
+        } else {
+          // No commits yet, use default branch name
+          try {
+            const { stdout } = await execAsync('git config --get init.defaultBranch');
+            currentBranch = stdout.trim() || 'main';
+          } catch {
+            currentBranch = 'main';
+          }
+        }
 
         let config: HermesConfig;
 
         if (options.quick) {
           // Quick mode with sensible defaults
-          config = createDefaultConfig(repoState.currentBranch);
+          config = createDefaultConfig(currentBranch);
         } else {
           // Interactive configuration
-          config = await interactiveConfig(repoState);
+          config = await interactiveConfig({ currentBranch });
         }
 
         // Create .hermes directory and save config
@@ -86,10 +144,16 @@ export function initCommand(program: Command) {
 
         displaySuccess('Hermes initialized successfully!');
         console.log('\n📄 Configuration saved to .hermes/config.json');
-        console.log('💡 Tip: Commit .hermes/config.json to share with your team\n');
+
+        if (!hasAnyCommits) {
+          console.log('💡 Tip: Make your first commit, then try: hermes start "your first feature"');
+        } else {
+          console.log('💡 Tip: Commit .hermes/config.json to share with your team\n');
+          console.log('🚀 Try: hermes start "your first feature"');
+        }
 
         // Show what's enabled
-        console.log('✨ Features enabled:');
+        console.log('\n✨ Features enabled:');
         if (config.preferences.autoBackup) {
           console.log('  • Auto-backup before risky operations');
         }
@@ -100,7 +164,6 @@ export function initCommand(program: Command) {
           console.log(`  • ${config.integrations.tickets} integration`);
         }
         console.log();
-        console.log('🚀 Try: hermes start "your first feature"');
       } catch (error) {
         console.error('❌ Error:', error instanceof Error ? error.message : error);
         process.exit(1);
@@ -137,7 +200,7 @@ function createDefaultConfig(currentBranch: string): HermesConfig {
   };
 }
 
-async function interactiveConfig(repoState: any): Promise<HermesConfig> {
+async function interactiveConfig(repoInfo: { currentBranch: string }): Promise<HermesConfig> {
   console.log('📝 Let\'s set up Hermes for your project.\n');
 
   const answers = await inquirer.prompt([
@@ -151,7 +214,7 @@ async function interactiveConfig(repoState: any): Promise<HermesConfig> {
       type: 'input',
       name: 'mainBranch',
       message: 'Main branch name:',
-      default: repoState.currentBranch === 'master' ? 'master' : 'main',
+      default: repoInfo.currentBranch === 'master' ? 'master' : 'main',
     },
     {
       type: 'input',

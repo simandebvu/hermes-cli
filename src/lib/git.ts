@@ -86,6 +86,42 @@ export async function getRepoState(): Promise<RepoState> {
 }
 
 /**
+ * Check if Git is installed on the system
+ */
+export async function isGitInstalled(): Promise<boolean> {
+  try {
+    await execAsync('git --version');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if the current directory is a Git repository
+ */
+export async function isGitRepository(): Promise<boolean> {
+  try {
+    await execAsync('git rev-parse --git-dir');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if the repository has any commits
+ */
+export async function hasCommits(): Promise<boolean> {
+  try {
+    await execAsync('git rev-parse HEAD');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Execute a Git command
  */
 export async function executeGitCommand(command: string): Promise<string> {
