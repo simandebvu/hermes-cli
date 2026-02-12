@@ -469,25 +469,97 @@ Hermes is **terminal-native** and **explainable**:
 ### Copilot CLI Not Found
 
 ```bash
-Error: GitHub Copilot CLI not found
+❌ GitHub Copilot CLI is not installed
 ```
 
-**Solution:** Install from [github.com/github/copilot-cli](https://github.com/github/copilot-cli)
+**Problem:** Hermes requires the standalone Copilot CLI (not the deprecated `gh copilot` extension).
+
+**Solution:**
+
+```bash
+# Install via npm (recommended)
+npm install -g @github/copilot
+
+# Or via Homebrew (macOS/Linux)
+brew install github/gh/copilot-cli
+
+# Verify installation
+copilot --version
+```
+
+**Note:** The old `gh copilot` extension was deprecated on October 25, 2025. If you have it installed, you'll see a warning—install the new standalone CLI instead.
+
+---
 
 ### Authentication Required
 
 ```bash
-Error: authentication required
+❌ GitHub Copilot CLI is not authenticated
 ```
 
-**Solution:** Run `copilot login` and complete OAuth flow
+**Problem:** Copilot CLI needs GitHub authentication to work.
+
+**Solution (choose one):**
+
+**Option 1: OAuth (Recommended)**
+```bash
+# Start Copilot CLI interactively
+copilot
+
+# In the Copilot prompt, type:
+/login
+
+# Follow the browser OAuth flow
+```
+
+**Option 2: Personal Access Token**
+```bash
+# Create a token at: https://github.com/settings/tokens
+# Enable "Copilot Requests" permission under "Permissions"
+
+# Set the token in your environment
+export GH_TOKEN="your_token_here"
+
+# Add to your shell profile (~/.bashrc, ~/.zshrc) to persist:
+echo 'export GH_TOKEN="your_token_here"' >> ~/.bashrc
+```
+
+**Option 3: GitHub CLI Integration**
+```bash
+# If you already have gh CLI installed and authenticated
+gh auth login
+
+# Copilot CLI will automatically use those credentials
+```
+
+**Requirements:**
+- Active GitHub Copilot subscription ([subscribe here](https://github.com/features/copilot/plans))
+- If using organization Copilot, "Copilot CLI" must be enabled in org settings
+
+---
+
+### Subscription Issues
+
+```bash
+❌ GitHub Copilot subscription required
+```
+
+**Solution:**
+- Verify you have an active Copilot subscription at [github.com/settings/copilot](https://github.com/settings/copilot)
+- If using organization Copilot, check with your admin that "Copilot CLI" is enabled
+- Individual plans start at $10/month, or free for students/OSS maintainers
+
+---
 
 ### Slow Responses
 
 If AI responses are slow, try:
-- Use a faster model: `--model claude-sonnet-4.5` (default)
+- Use a faster model: `--model claude-sonnet-4.5` (default, fastest)
 - Check internet connection
 - Verify Copilot subscription is active
+- Try running `copilot` directly to test connection
+
+---
 
 ### Command Not Working
 
@@ -495,13 +567,30 @@ If AI responses are slow, try:
 # Check Hermes version
 hermes --version
 
-# Verify Copilot CLI
+# Verify Copilot CLI is installed and authenticated
 copilot --version
+copilot -p "test" --allow-all-tools -s
+
+# Check git is working
+git status
 
 # Test in a clean repo
 cd /tmp && git init test && cd test
+git config user.name "Test" && git config user.email "test@example.com"
 hermes plan "test"
 ```
+
+---
+
+### Getting Help
+
+If you're still having issues:
+1. Check the [GitHub Copilot CLI documentation](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli)
+2. Verify Copilot CLI works independently: `copilot -p "hello" -s`
+3. Open an issue at [github.com/simandebvu/hermes-cli/issues](https://github.com/simandebvu/hermes-cli/issues) with:
+   - Output of `hermes --version`
+   - Output of `copilot --version`
+   - The exact error message you're seeing
 
 ---
 

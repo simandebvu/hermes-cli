@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import chalk from 'chalk';
 
 const execAsync = promisify(exec);
 
@@ -60,12 +61,46 @@ export async function getCopilotSuggestion(
     return stdout.trim();
   } catch (error: any) {
     if (error.code === 'ENOENT' || error.message.includes('not found')) {
+      throw new CopilotNotInstalledError();
+    }
+
+    // Check for authentication errors
+    const errorMessage = (error.message || '').toLowerCase();
+    const stderr = (error.stderr || '').toLowerCase();
+    const combinedError = errorMessage + ' ' + stderr;
+
+    if (
+      combinedError.includes('no authentication information') ||
+      combinedError.includes('authentication required') ||
+      combinedError.includes('not authenticated') ||
+      combinedError.includes('copilot_github_token') ||
+      combinedError.includes('gh_token') ||
+      combinedError.includes('github_token')
+    ) {
+      throw new CopilotNotAuthenticatedError(error.message);
+    }
+
+    // Check for subscription errors
+    if (
+      combinedError.includes('subscription') ||
+      combinedError.includes('not authorized') ||
+      combinedError.includes('access denied')
+    ) {
       throw new Error(
-        'GitHub Copilot CLI not found. Install it from: https://github.com/github/copilot-cli\n' +
-        'Then authenticate with: copilot login'
+        chalk.red('❌ GitHub Copilot subscription required\n\n') +
+        chalk.white('Hermes requires an active GitHub Copilot subscription.\n') +
+        chalk.gray('Subscribe at: https://github.com/features/copilot/plans\n\n') +
+        chalk.dim('Original error: ' + error.message)
       );
     }
-    throw new Error(`Copilot CLI error: ${error.message}`);
+
+    // Generic error with better formatting
+    throw new Error(
+      chalk.red('❌ Copilot CLI error\n\n') +
+      chalk.white(error.message) +
+      '\n\n' +
+      chalk.dim('If this persists, try running: copilot --version')
+    );
   }
 }
 
@@ -73,23 +108,137 @@ export async function getCopilotSuggestion(
  * Check if GitHub Copilot CLI is installed and authenticated
  */
 async function checkCopilotCLI(): Promise<void> {
-  try {
-    const { stdout } = await execAsync('copilot --version');
+  // Check for deprecated gh copilot extension
+  await checkForDeprecatedGhCopilot();
 
-    // Version check passed, now verify authentication
-    // The CLI will prompt for login if not authenticated
+  // Check if copilot CLI is installed
+  try {
+    const { stdout } = await execAsync('copilot --version', { timeout: 5000 });
+
     if (!stdout.includes('GitHub Copilot CLI')) {
       throw new Error('Invalid Copilot CLI installation');
     }
   } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      throw new Error(
-        'GitHub Copilot CLI is not installed.\n' +
-        'Install from: https://github.com/github/copilot-cli\n' +
-        'Or with npm: npm install -g @githubnext/github-copilot-cli'
-      );
+    if (error.code === 'ENOENT' || error.message.includes('not found')) {
+      throw new CopilotNotInstalledError();
     }
     throw error;
+  }
+
+  // Note: We check authentication when actually calling copilot, not here
+  // This allows for better error messages with context about gh CLI status
+}
+
+/**
+ * Check for deprecated gh copilot extension and warn user
+ */
+async function checkForDeprecatedGhCopilot(): Promise<void> {
+  try {
+    const { stdout } = await execAsync('gh copilot --version', { timeout: 5000 });
+
+    if (stdout) {
+      // User has the old gh copilot extension installed
+      console.warn(chalk.yellow('\n⚠️  Warning: You have the deprecated "gh copilot" extension installed.'));
+      console.warn(chalk.yellow('   The GitHub Copilot extension was deprecated on October 25, 2025.'));
+      console.warn(chalk.yellow('   Hermes requires the new standalone "copilot" CLI.\n'));
+    }
+  } catch {
+    // gh copilot not found, which is fine
+  }
+}
+
+/**
+ * Custom error for Copilot CLI not installed
+ */
+class CopilotNotInstalledError extends Error {
+  constructor() {
+    const message = [
+      '',
+      chalk.red('❌ GitHub Copilot CLI is not installed'),
+      '',
+      chalk.bold('Hermes requires the standalone Copilot CLI (not the deprecated gh copilot extension).'),
+      '',
+      chalk.cyan('📦 Installation Options:'),
+      '',
+      chalk.white('  npm:       ') + chalk.gray('npm install -g @github/copilot'),
+      chalk.white('  Homebrew:  ') + chalk.gray('brew install github/gh/copilot-cli'),
+      chalk.white('  Manual:    ') + chalk.gray('https://github.com/github/copilot-cli/releases'),
+      '',
+      chalk.cyan('🔐 After installation, authenticate with:'),
+      '',
+      chalk.white('  copilot') + chalk.gray(' (then run /login command)'),
+      '',
+      chalk.dim('📚 Learn more: https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli'),
+      '',
+    ].join('\n');
+
+    super(message);
+    this.name = 'CopilotNotInstalledError';
+  }
+}
+
+/**
+ * Custom error for Copilot CLI authentication issues
+ */
+class CopilotNotAuthenticatedError extends Error {
+  constructor(originalError?: string) {
+    // Check if gh CLI is authenticated
+    const ghAuthStatus = checkGhAuthenticationSync();
+
+    const message = [
+      '',
+      chalk.red('❌ GitHub Copilot CLI is not authenticated'),
+      '',
+      ghAuthStatus.isAuthenticated
+        ? chalk.yellow('⚠️  Note: You have gh CLI authenticated, but Copilot CLI needs separate authentication.')
+        : chalk.bold('Hermes needs access to GitHub Copilot to provide AI-powered Git guidance.'),
+      '',
+      chalk.cyan('🔐 Quick Fix:'),
+      '',
+      chalk.white('  Run: ') + chalk.bold.green('copilot'),
+      chalk.gray('  Then type: ') + chalk.bold('/login'),
+      chalk.gray('  Follow the OAuth flow in your browser'),
+      '',
+      chalk.cyan('🔐 Alternative - Personal Access Token:'),
+      '',
+      chalk.gray('  1. Create token: https://github.com/settings/tokens/new'),
+      chalk.gray('  2. Enable "Copilot Requests" permission'),
+      chalk.gray('  3. Run: ') + chalk.white('export GH_TOKEN="your_token_here"'),
+      chalk.gray('  4. Add to ~/.bashrc or ~/.zshrc to persist'),
+      '',
+      chalk.cyan('📋 Requirements:'),
+      chalk.gray('  • Active GitHub Copilot subscription'),
+      chalk.gray('  • If using organization Copilot, "Copilot CLI" must be enabled in org settings'),
+      '',
+      chalk.dim('📚 Learn more: https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli'),
+      '',
+    ].join('\n');
+
+    super(message);
+    this.name = 'CopilotNotAuthenticatedError';
+  }
+}
+
+/**
+ * Synchronously check if gh CLI is authenticated
+ */
+function checkGhAuthenticationSync(): { isAuthenticated: boolean; username?: string } {
+  try {
+    const { execSync } = require('child_process');
+    const result = execSync('gh auth status 2>&1', {
+      encoding: 'utf-8',
+      timeout: 2000,
+    });
+
+    const isAuthenticated = result.includes('Logged in to github.com');
+    const usernameMatch = result.match(/Logged in to github\.com as (\S+)/);
+
+    return {
+      isAuthenticated,
+      username: usernameMatch?.[1],
+    };
+  } catch {
+    return { isAuthenticated: false };
   }
 }
 
