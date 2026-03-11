@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { getCopilotGitPlan } from '../lib/copilot.js';
+import { getGitPlan, validateGitCommand } from '../lib/ai.js';
 import { getRepoState, executeGitCommand } from '../lib/git.js';
 import { displaySuccess, displayStep } from '../lib/display.js';
 
@@ -16,8 +16,7 @@ export function wipCommand(program: Command) {
 
         const messageNote = options.message ? ` with message: "${options.message}"` : '';
 
-        // Get Git plan from Copilot
-        const planResponse = await getCopilotGitPlan(
+        const planResponse = await getGitPlan(
           repoState,
           `Save work in progress${messageNote}. Decide whether to commit or stash. Return JSON with: approach, commands[], explanation.`
         );
@@ -26,7 +25,7 @@ export function wipCommand(program: Command) {
         try {
           plan = JSON.parse(planResponse);
         } catch {
-          console.log('💭 Copilot suggests:\n');
+          console.log('💭 Hermes suggests:\n');
           console.log(planResponse);
           console.log('\n⚠️  Could not auto-execute. Please review the plan above.');
           return;
@@ -52,6 +51,7 @@ export function wipCommand(program: Command) {
               continue;
             }
 
+            validateGitCommand(cmdString);
             displayStep(cmdString);
             await executeGitCommand(cmdString);
           }

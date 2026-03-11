@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { analyzeCopilotGitState, getCopilotSuggestion } from '../lib/copilot.js';
+import { analyzeGitState, getAISuggestion } from '../lib/ai.js';
 import { getRepoState, getConflictedFiles, executeGitCommand } from '../lib/git.js';
 import { displayConflictExplanation, displayStep } from '../lib/display.js';
 import inquirer from 'inquirer';
@@ -25,8 +25,7 @@ export function conflictCommand(program: Command) {
           return;
         }
 
-        // Get AI explanation from Copilot CLI
-        const explanation = await analyzeCopilotGitState(
+        const explanation = await analyzeGitState(
           { ...repoState, conflictedFiles },
           `Explain these merge conflicts: ${conflictedFiles.join(', ')}. For each file, explain what each side is trying to do and recommend a resolution strategy.`
         );
@@ -74,7 +73,7 @@ Ensure the resolution makes logical sense and preserves the intent of both sides
 Return ONLY the resolved file content, no explanations.
 `;
 
-          const resolution = await getCopilotSuggestion(prompt, { silent: true });
+          const resolution = await getAISuggestion(prompt);
 
           // Show preview of resolution
           console.log('\n💡 Proposed resolution preview:');

@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { getCopilotGitPlan } from '../lib/copilot.js';
+import { getGitPlan, validateGitCommand } from '../lib/ai.js';
 import { getRepoState, executeGitCommand } from '../lib/git.js';
 import { displaySuccess, displayStep } from '../lib/display.js';
 import { loadConfig, generateBranchName } from '../lib/config.js';
@@ -30,8 +30,7 @@ export function startCommand(program: Command) {
           console.log(`💡 Suggested branch: ${suggestedBranchName}\n`);
         }
 
-        // Get Git plan from Copilot
-        const planResponse = await getCopilotGitPlan(
+        const planResponse = await getGitPlan(
           repoState,
           `Start working on: ${task}. ${
             suggestedBranchName
@@ -44,8 +43,7 @@ export function startCommand(program: Command) {
         try {
           plan = JSON.parse(planResponse);
         } catch {
-          // If JSON parsing fails, extract info from text response
-          console.log('💭 Copilot suggests:\n');
+          console.log('💭 Hermes suggests:\n');
           console.log(planResponse);
           console.log('\n⚠️  Could not auto-execute. Please review the plan above.');
           return;
@@ -77,6 +75,7 @@ export function startCommand(program: Command) {
               continue;
             }
 
+            validateGitCommand(cmdString);
             displayStep(cmdString);
             await executeGitCommand(cmdString);
             gitCommandsRun++;

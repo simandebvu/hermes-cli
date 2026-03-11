@@ -2,6 +2,9 @@ import { Command } from 'commander';
 import { executeGitCommand, getRepoState } from '../lib/git.js';
 import { loadConfig } from '../lib/config.js';
 import { displaySuccess, displayStep } from '../lib/display.js';
+import { getAISuggestion } from '../lib/ai.js';
+import inquirer from 'inquirer';
+import chalk from 'chalk';
 
 export function workflowCommand(program: Command) {
   const workflow = program
@@ -67,8 +70,9 @@ export function workflowCommand(program: Command) {
 
   workflow
     .command('quick-commit')
-    .description('Quick commit all changes with AI-generated message')
-    .action(async () => {
+    .description('Stage changed files and commit with an AI-generated message')
+    .option('-a, --all', 'Stage all changes (default: only already-staged files)')
+    .action(async (options: { all?: boolean }) => {
       try {
         console.log('⚡ Quick commit...\n');
 
@@ -79,18 +83,73 @@ export function workflowCommand(program: Command) {
           return;
         }
 
-        // Stage all changes
-        displayStep('git add -A');
-        await executeGitCommand('git add -A');
+        if (options.all) {
+          displayStep('git add -A');
+          await executeGitCommand('git add -A');
+        }
 
-        // Get diff for commit message
         const diff = await executeGitCommand('git diff --cached --stat');
+        const diffFull = await executeGitCommand('git diff --cached');
+
+        if (!diff.trim()) {
+          console.log('⚠️  No staged changes. Use --all to stage everything, or `git add` specific files first.');
+          return;
+        }
 
         console.log('\n📝 Staged changes:');
         console.log(diff);
 
-        // TODO: Use Copilot to generate commit message from diff
-        console.log('\n💡 Tip: Use `git commit` with a descriptive message');
+        console.log('\n🤖 Generating commit message...');
+
+        const message = await getAISuggestion(`Generate a concise git commit message for these changes.
+
+Rules:
+- Use conventional commits format: type(scope): description
+- First line max 72 characters
+- type is one of: feat, fix, refactor, docs, test, chore, style, perf
+- Be specific about what changed, not how
+- Return ONLY the commit message, no explanation, no quotes, no backticks
+
+Diff:
+${diffFull.slice(0, 8000)}`);
+
+        console.log(`\n💬 Proposed message:\n   ${chalk.cyan(message)}\n`);
+
+        const { action } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'action',
+            message: 'Commit with this message?',
+            choices: [
+              { name: 'Yes, commit', value: 'commit' },
+              { name: 'Edit message', value: 'edit' },
+              { name: 'Cancel', value: 'cancel' },
+            ],
+          },
+        ]);
+
+        if (action === 'cancel') {
+          console.log('Cancelled. Changes remain staged.');
+          return;
+        }
+
+        let finalMessage = message;
+
+        if (action === 'edit') {
+          const { edited } = await inquirer.prompt([
+            {
+              type: 'input',
+              name: 'edited',
+              message: 'Commit message:',
+              default: message,
+            },
+          ]);
+          finalMessage = edited;
+        }
+
+        displayStep(`git commit -m "${finalMessage}"`);
+        await executeGitCommand(`git commit -m ${JSON.stringify(finalMessage)}`);
+        displaySuccess('Committed!');
       } catch (error) {
         console.error('❌ Error:', error instanceof Error ? error.message : error);
         process.exit(1);

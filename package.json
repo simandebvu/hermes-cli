@@ -1,11 +1,11 @@
 {
   "name": "hermes-git",
-  "version": "0.2.5",
+  "version": "0.3.6",
   "description": "Intent-driven Git, guided by AI. Turn natural language into safe, explainable Git operations.",
   "type": "module",
   "main": "./dist/index.js",
   "bin": {
-    "hermes": "./dist/index.js"
+    "hermes": "dist/index.js"
   },
   "files": [
     "dist",
@@ -22,14 +22,14 @@
     "git",
     "cli",
     "ai",
-    "copilot",
     "developer-tools",
     "productivity",
-    "github-copilot",
     "git-workflow",
-    "developer-experience"
+    "developer-experience",
+    "anthropic",
+    "claude"
   ],
-  "author": "Simbarashe Mandebvu",
+  "author": "Shingirayi Innocent Mandebvu",
   "homepage": "https://github.com/simandebvu/hermes-cli#readme",
   "repository": {
     "type": "git",
@@ -40,10 +40,14 @@
   },
   "license": "MIT",
   "dependencies": {
-    "commander": "^12.1.0",
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@google/generative-ai": "^0.24.1",
     "chalk": "^5.3.0",
-    "ora": "^8.0.1",
-    "inquirer": "^10.1.0"
+    "commander": "^12.1.0",
+    "dotenv": "^17.3.1",
+    "inquirer": "^10.1.0",
+    "openai": "^6.27.0",
+    "ora": "^8.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

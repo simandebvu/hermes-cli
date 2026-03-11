@@ -139,8 +139,11 @@ export function initCommand(program: Command) {
         // Create .hermes/backups directory
         await mkdir('.hermes/backups', { recursive: true });
 
-        // Create .gitignore entry for backups
-        await appendToGitignore('.hermes/backups/\n.hermes/stats.json\n');
+        // Update .gitignore
+        const added = await updateGitignore();
+        if (added.length > 0) {
+          console.log(`\n📝 Added to .gitignore: ${added.join(', ')}`);
+        }
 
         displaySuccess('Hermes initialized successfully!');
         console.log('\n📄 Configuration saved to .hermes/config.json');
@@ -288,21 +291,35 @@ async function interactiveConfig(repoInfo: { currentBranch: string }): Promise<H
   };
 }
 
-async function appendToGitignore(content: string): Promise<void> {
-  try {
-    const { appendFile } = await import('fs/promises');
-    const gitignorePath = '.gitignore';
+const GITIGNORE_ENTRIES = [
+  { pattern: '.env',           comment: null },
+  { pattern: '.env.*',         comment: null },
+  { pattern: '!.env.example',  comment: null },
+  { pattern: '.hermes/backups/', comment: null },
+  { pattern: '.hermes/stats.json', comment: null },
+];
 
-    if (existsSync(gitignorePath)) {
-      const { readFile } = await import('fs/promises');
-      const existing = await readFile(gitignorePath, 'utf-8');
-      if (!existing.includes('.hermes/backups')) {
-        await appendFile(gitignorePath, '\n# Hermes\n' + content);
-      }
-    } else {
-      await writeFile(gitignorePath, '# Hermes\n' + content);
-    }
-  } catch {
-    // Ignore gitignore errors
+async function updateGitignore(): Promise<string[]> {
+  const { appendFile, readFile: rf } = await import('fs/promises');
+  const gitignorePath = '.gitignore';
+
+  let existing = '';
+  if (existsSync(gitignorePath)) {
+    try { existing = await rf(gitignorePath, 'utf-8'); } catch { /* ignore */ }
   }
+
+  const existingLines = existing.split('\n').map(l => l.trim());
+  const toAdd = GITIGNORE_ENTRIES.filter(e => !existingLines.includes(e.pattern));
+
+  if (toAdd.length === 0) return [];
+
+  const block = '\n# Hermes\n' + toAdd.map(e => e.pattern).join('\n') + '\n';
+
+  if (existsSync(gitignorePath)) {
+    await appendFile(gitignorePath, block);
+  } else {
+    await writeFile(gitignorePath, block.trimStart());
+  }
+
+  return toAdd.map(e => e.pattern);
 }

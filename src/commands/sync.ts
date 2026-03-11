@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { getCopilotGitPlan } from '../lib/copilot.js';
+import { getGitPlan, validateGitCommand } from '../lib/ai.js';
 import { getRepoState, executeGitCommand } from '../lib/git.js';
 import { displaySuccess, displayStep, displayWarning } from '../lib/display.js';
 
@@ -16,8 +16,7 @@ export function syncCommand(program: Command) {
 
         const fromNote = options.from ? ` from ${options.from}` : ' from main';
 
-        // Get Git plan from Copilot
-        const planResponse = await getCopilotGitPlan(
+        const planResponse = await getGitPlan(
           repoState,
           `Sync branch${fromNote}. Evaluate if rebase or merge is safer. Check if branch is shared. Return JSON with: approach, isRisky, riskExplanation, commands[], explanation.`
         );
@@ -26,7 +25,7 @@ export function syncCommand(program: Command) {
         try {
           plan = JSON.parse(planResponse);
         } catch {
-          console.log('💭 Copilot suggests:\n');
+          console.log('💭 Hermes suggests:\n');
           console.log(planResponse);
           console.log('\n⚠️  Could not auto-execute. Please review the plan above.');
           return;
@@ -57,6 +56,7 @@ export function syncCommand(program: Command) {
               continue;
             }
 
+            validateGitCommand(cmdString);
             displayStep(cmdString);
             await executeGitCommand(cmdString);
           }

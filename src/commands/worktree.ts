@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { getCopilotGitPlan } from '../lib/copilot.js';
+import { getGitPlan, validateGitCommand } from '../lib/ai.js';
 import { getRepoState, executeGitCommand } from '../lib/git.js';
 import { displaySuccess, displayStep } from '../lib/display.js';
 
@@ -18,8 +18,7 @@ export function worktreeCommand(program: Command) {
 
         const repoState = await getRepoState();
 
-        // Get Git plan from Copilot
-        const planResponse = await getCopilotGitPlan(
+        const planResponse = await getGitPlan(
           repoState,
           `Create a worktree for: ${task}. Provide safe branch name, worktree path (e.g., ../repo-branchname), and git worktree commands. Return JSON with: branchName, worktreePath, commands[], explanation.`
         );
@@ -28,7 +27,7 @@ export function worktreeCommand(program: Command) {
         try {
           plan = JSON.parse(planResponse);
         } catch {
-          console.log('💭 Copilot suggests:\n');
+          console.log('💭 Hermes suggests:\n');
           console.log(planResponse);
           console.log('\n⚠️  Could not auto-execute. Please review the plan above.');
           return;
@@ -59,6 +58,7 @@ export function worktreeCommand(program: Command) {
               continue;
             }
 
+            validateGitCommand(cmdString);
             displayStep(cmdString);
             await executeGitCommand(cmdString);
           }

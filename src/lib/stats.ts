@@ -8,13 +8,11 @@ export interface StatsEntry {
   duration: number;
   success: boolean;
   gitCommandsRun: number;
-  timeSaved?: number; // estimated time saved vs raw git
 }
 
 export interface Stats {
   totalCommands: number;
   totalGitCommands: number;
-  totalTimeSaved: number; // in seconds
   commandHistory: StatsEntry[];
   startDate: number;
   lastUsed: number;
@@ -69,9 +67,6 @@ export async function recordCommand(
 ): Promise<void> {
   const stats = await loadStats();
 
-  // Estimate time saved (conservative)
-  const timeSaved = estimateTimeSaved(command, gitCommandsRun);
-
   const entry: StatsEntry = {
     timestamp: Date.now(),
     command,
@@ -79,12 +74,10 @@ export async function recordCommand(
     duration,
     success,
     gitCommandsRun,
-    timeSaved,
   };
 
   stats.totalCommands++;
   stats.totalGitCommands += gitCommandsRun;
-  stats.totalTimeSaved += timeSaved;
   stats.lastUsed = Date.now();
   stats.commandHistory.push(entry);
 
@@ -115,11 +108,6 @@ export async function getStatsSummary(days: number = 30): Promise<StatsSummary> 
     .slice(0, 5)
     .map(([cmd, count]) => ({ command: cmd, count }));
 
-  const timeSavedRecent = recentEntries.reduce(
-    (sum, e) => sum + (e.timeSaved || 0),
-    0
-  );
-
   const totalDays = Math.max(
     1,
     Math.ceil((Date.now() - stats.startDate) / (24 * 60 * 60 * 1000))
@@ -130,8 +118,6 @@ export async function getStatsSummary(days: number = 30): Promise<StatsSummary> 
     allTimeCommands: stats.totalCommands,
     gitCommandsRun: recentEntries.reduce((sum, e) => sum + e.gitCommandsRun, 0),
     allTimeGitCommands: stats.totalGitCommands,
-    timeSavedSeconds: timeSavedRecent,
-    allTimeTimeSavedSeconds: stats.totalTimeSaved,
     successRate: recentEntries.length
       ? successCount / recentEntries.length
       : 0,
@@ -146,42 +132,16 @@ export interface StatsSummary {
   allTimeCommands: number;
   gitCommandsRun: number;
   allTimeGitCommands: number;
-  timeSavedSeconds: number;
-  allTimeTimeSavedSeconds: number;
   successRate: number;
   topCommands: Array<{ command: string; count: number }>;
   daysActive: number;
   commandsPerDay: number;
 }
 
-/**
- * Estimate time saved by using Hermes vs raw Git
- */
-function estimateTimeSaved(command: string, gitCommandsRun: number): number {
-  // Conservative estimates in seconds
-  const estimates: { [key: string]: number } = {
-    plan: 120, // 2 min thinking time saved
-    start: 60, // 1 min for branch naming, base selection
-    sync: 90, // 1.5 min for rebase/merge decision
-    wip: 30, // 30s for commit vs stash decision
-    conflict: 180, // 3 min per conflict explanation
-    worktree: 90, // 1.5 min for worktree setup
-  };
-
-  const baseSaving = estimates[command] || 0;
-
-  // Additional savings: each git command prevented saves ~15s
-  // (looking up syntax, thinking, potential mistakes)
-  const commandSaving = Math.max(0, gitCommandsRun - 1) * 15;
-
-  return baseSaving + commandSaving;
-}
-
 function createEmptyStats(): Stats {
   return {
     totalCommands: 0,
     totalGitCommands: 0,
-    totalTimeSaved: 0,
     commandHistory: [],
     startDate: Date.now(),
     lastUsed: Date.now(),

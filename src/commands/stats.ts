@@ -18,17 +18,6 @@ export function statsCommand(program: Command) {
 
         const summary = await getStatsSummary(days);
 
-        // Time saved
-        const timeSavedHours = summary.timeSavedSeconds / 3600;
-        const allTimeHours = summary.allTimeTimeSavedSeconds / 3600;
-
-        console.log(chalk.bold('⏱️  Time Saved'));
-        console.log(`   ${chalk.green(formatDuration(summary.timeSavedSeconds))} (${timeSavedHours.toFixed(1)} hours)`);
-        if (!options.allTime) {
-          console.log(chalk.dim(`   All-time: ${formatDuration(summary.allTimeTimeSavedSeconds)} (${allTimeHours.toFixed(1)} hours)`));
-        }
-        console.log();
-
         // Commands
         const reduction = summary.gitCommandsRun > 0
           ? Math.round((1 - summary.totalCommands / summary.gitCommandsRun) * 100)
@@ -65,20 +54,6 @@ export function statsCommand(program: Command) {
         console.log(`   Active days: ${chalk.cyan(summary.daysActive)}`);
         console.log(`   Avg commands/day: ${chalk.cyan(summary.commandsPerDay.toFixed(1))}`);
         console.log();
-
-        // Efficiency comparison
-        if (timeSavedHours > 0) {
-          const weeklySavings = (timeSavedHours / days) * 7;
-          const monthlySavings = (timeSavedHours / days) * 30;
-
-          console.log(chalk.bold('💡  Efficiency Insights'));
-          console.log(`   Weekly time saved: ${chalk.green(`~${weeklySavings.toFixed(1)}h`)}`);
-          console.log(`   Monthly time saved: ${chalk.green(`~${monthlySavings.toFixed(1)}h`)}`);
-
-          const efficiency = Math.min(50, Math.round((timeSavedHours / (days / 30)) * 10));
-          console.log(`   Efficiency gain: ${chalk.green(`+${efficiency}%`)} compared to raw Git`);
-          console.log();
-        }
 
         // Streak
         if (summary.daysActive >= 7) {
