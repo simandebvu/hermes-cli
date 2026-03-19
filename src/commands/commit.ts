@@ -148,8 +148,8 @@ export function commitCommand(program: Command) {
 
         // Stage all if requested
         if (options.all) {
-          displayStep('git add -u');
-          await execAsync('git add -u');
+          displayStep('git add -A');
+          await execAsync('git add -A');
         }
 
         const staged = await getStagedFiles();

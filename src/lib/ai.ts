@@ -1,5 +1,12 @@
 import chalk from 'chalk';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { mkdtemp, readFile, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import path from 'path';
 import { getResolvedEnv, type Provider } from './env.js';
+
+const execAsync = promisify(exec);
 
 // ─── Provider interface ────────────────────────────────────────────────────
 
@@ -79,6 +86,94 @@ async function makeGeminiProvider(apiKey: string): Promise<AIProvider> {
   };
 }
 
+// ─── Claude Code CLI ──────────────────────────────────────────────────────
+
+async function makeClaudeCodeProvider(): Promise<AIProvider> {
+  // Verify the CLI is available
+  try {
+    await execAsync('claude --version', { timeout: 5000 });
+  } catch {
+    throw new Error('claude CLI not found — install Claude Code first');
+  }
+
+  return {
+    name: 'Claude Code',
+    model: 'claude (via CLI)',
+    async complete(prompt: string): Promise<string> {
+      // Unset CLAUDECODE so the subprocess isn't blocked by the nested-session guard
+      const env = { ...process.env };
+      delete env.CLAUDECODE;
+
+      const escaped = prompt.replace(/'/g, `'"'"'`);
+      const { stdout, stderr } = await execAsync(
+        `claude -p '${escaped}' --no-session-persistence --tools ""`,
+        { env, timeout: 60_000 }
+      );
+
+      const text = (stdout || stderr).trim();
+      if (!text) throw new Error('Empty response from Claude Code CLI');
+
+      // Strip any ANSI escape codes
+      return text.replace(/\x1b\[[0-9;]*m/g, '');
+    },
+  };
+}
+
+// ─── OpenAI Codex CLI ─────────────────────────────────────────────────────
+
+async function makeCodexProvider(): Promise<AIProvider> {
+  try {
+    await execAsync('codex --version', { timeout: 5000 });
+  } catch {
+    throw new Error('codex CLI not found — install OpenAI Codex first');
+  }
+
+  return {
+    name: 'Codex',
+    model: 'codex (via CLI)',
+    async complete(prompt: string): Promise<string> {
+      // Write prompt to a temp file to avoid shell-escaping issues with long prompts
+      const tmpDir = await mkdtemp(path.join(tmpdir(), 'hermes-'));
+      const promptFile = path.join(tmpDir, 'prompt.txt');
+      const outputFile = path.join(tmpDir, 'output.txt');
+
+      try {
+        const { writeFile } = await import('fs/promises');
+        await writeFile(promptFile, prompt, 'utf-8');
+
+        await execAsync(
+          `codex exec --color never -o "${outputFile}" - < "${promptFile}"`,
+          { timeout: 60_000 }
+        );
+
+        const text = (await readFile(outputFile, 'utf-8')).trim();
+        if (!text) throw new Error('Empty response from Codex CLI');
+        return text;
+      } finally {
+        await rm(tmpDir, { recursive: true, force: true });
+      }
+    },
+  };
+}
+
+export async function isCodexAvailable(): Promise<boolean> {
+  try {
+    await execAsync('codex --version', { timeout: 3000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function isClaudeCodeAvailable(): Promise<boolean> {
+  try {
+    await execAsync('claude --version', { timeout: 3000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ─── Provider selection ────────────────────────────────────────────────────
 
 let _provider: AIProvider | null = null;
@@ -88,39 +183,27 @@ async function getProvider(): Promise<AIProvider> {
 
   const env = await getResolvedEnv();
 
-  // If a provider is explicitly chosen, require its key
+  // If a provider is explicitly chosen, require its key (or CLI for claude-code)
   if (env.provider) {
     const factories: Record<Provider, () => Promise<AIProvider>> = {
-      anthropic: () => {
-        if (!env.anthropicApiKey) throw new MissingKeyError('anthropic');
-        return makeAnthropicProvider(env.anthropicApiKey!);
-      },
-      openai: () => {
-        if (!env.openaiApiKey) throw new MissingKeyError('openai');
-        return makeOpenAIProvider(env.openaiApiKey!);
-      },
-      gemini: () => {
-        if (!env.geminiApiKey) throw new MissingKeyError('gemini');
-        return makeGeminiProvider(env.geminiApiKey!);
-      },
+      anthropic:    () => { if (!env.anthropicApiKey) throw new MissingKeyError('anthropic'); return makeAnthropicProvider(env.anthropicApiKey!); },
+      openai:       () => { if (!env.openaiApiKey)    throw new MissingKeyError('openai');    return makeOpenAIProvider(env.openaiApiKey!); },
+      gemini:       () => { if (!env.geminiApiKey)    throw new MissingKeyError('gemini');    return makeGeminiProvider(env.geminiApiKey!); },
+      'claude-code': () => makeClaudeCodeProvider(),
+      'codex':       () => makeCodexProvider(),
     };
     _provider = await factories[env.provider]();
     return _provider;
   }
 
-  // Auto-detect: first key found wins (anthropic > openai > gemini)
-  if (env.anthropicApiKey) {
-    _provider = await makeAnthropicProvider(env.anthropicApiKey);
-    return _provider;
-  }
-  if (env.openaiApiKey) {
-    _provider = await makeOpenAIProvider(env.openaiApiKey);
-    return _provider;
-  }
-  if (env.geminiApiKey) {
-    _provider = await makeGeminiProvider(env.geminiApiKey);
-    return _provider;
-  }
+  // Auto-detect: API keys first, then claude CLI as a no-key fallback
+  if (env.anthropicApiKey) { _provider = await makeAnthropicProvider(env.anthropicApiKey); return _provider; }
+  if (env.openaiApiKey)    { _provider = await makeOpenAIProvider(env.openaiApiKey);        return _provider; }
+  if (env.geminiApiKey)    { _provider = await makeGeminiProvider(env.geminiApiKey);        return _provider; }
+
+  // Last resort: local AI CLIs (no API key required) — claude-code before codex
+  if (await isClaudeCodeAvailable()) { _provider = await makeClaudeCodeProvider(); return _provider; }
+  if (await isCodexAvailable())      { _provider = await makeCodexProvider();      return _provider; }
 
   throw new NoProviderError();
 }
@@ -183,15 +266,18 @@ class NoProviderError extends Error {
     super(
       [
         '',
-        chalk.red('❌ No AI provider configured'),
+        chalk.red('  ✖ No AI provider configured'),
         '',
-        chalk.bold('Set one of these environment variables:'),
+        chalk.bold('  Option 1 — use a local AI CLI (no API key needed):'),
+        chalk.dim('    Claude Code: ') + chalk.cyan('hermes config set provider claude-code'),
+        chalk.dim('    Codex CLI:   ') + chalk.cyan('hermes config set provider codex'),
         '',
-        chalk.white('  Anthropic  ') + chalk.dim('export ANTHROPIC_API_KEY="sk-ant-..."') + chalk.dim('  → console.anthropic.com'),
-        chalk.white('  OpenAI     ') + chalk.dim('export OPENAI_API_KEY="sk-..."      ') + chalk.dim('  → platform.openai.com/api-keys'),
-        chalk.white('  Gemini     ') + chalk.dim('export GEMINI_API_KEY="AIza..."     ') + chalk.dim('  → aistudio.google.com/app/apikey'),
+        chalk.bold('  Option 2 — set an API key:'),
+        chalk.white('    Anthropic  ') + chalk.dim('export ANTHROPIC_API_KEY="sk-ant-..."  → console.anthropic.com'),
+        chalk.white('    OpenAI     ') + chalk.dim('export OPENAI_API_KEY="sk-..."         → platform.openai.com/api-keys'),
+        chalk.white('    Gemini     ') + chalk.dim('export GEMINI_API_KEY="AIza..."        → aistudio.google.com/app/apikey'),
         '',
-        chalk.dim('Or pin a provider: export HERMES_PROVIDER=anthropic|openai|gemini'),
+        chalk.dim('  Or run: hermes config setup'),
         '',
       ].join('\n')
     );
@@ -257,6 +343,36 @@ Ensure all Git commands are:
   }
 
   return response;
+}
+
+/**
+ * Returns all available providers, one per model family (Claude / OpenAI / Google).
+ * Prefers API keys over CLI where both exist for the same family.
+ */
+export async function getAllAvailableProviders(): Promise<AIProvider[]> {
+  const env = await getResolvedEnv();
+  const providers: AIProvider[] = [];
+
+  // Claude family: API key beats CLI
+  if (env.anthropicApiKey) {
+    providers.push(await makeAnthropicProvider(env.anthropicApiKey));
+  } else if (await isClaudeCodeAvailable()) {
+    providers.push(await makeClaudeCodeProvider());
+  }
+
+  // OpenAI family: API key beats CLI
+  if (env.openaiApiKey) {
+    providers.push(await makeOpenAIProvider(env.openaiApiKey));
+  } else if (await isCodexAvailable()) {
+    providers.push(await makeCodexProvider());
+  }
+
+  // Google family
+  if (env.geminiApiKey) {
+    providers.push(await makeGeminiProvider(env.geminiApiKey));
+  }
+
+  return providers;
 }
 
 /**

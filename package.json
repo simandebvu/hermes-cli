@@ -1,6 +1,6 @@
 {
   "name": "hermes-git",
-  "version": "0.3.6",
+  "version": "0.3.8",
   "description": "Intent-driven Git, guided by AI. Turn natural language into safe, explainable Git operations.",
   "type": "module",
   "main": "./dist/index.js",

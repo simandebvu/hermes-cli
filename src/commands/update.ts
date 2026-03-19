@@ -2,6 +2,12 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { writeFile, mkdir } from 'fs/promises';
+import { homedir } from 'os';
+import path from 'path';
+
+const CACHE_DIR = path.join(homedir(), '.hermes', 'cache');
+const CACHE_FILE = path.join(CACHE_DIR, 'update-check.json');
 
 const execAsync = promisify(exec);
 const PACKAGE_NAME = 'hermes-git';
@@ -67,6 +73,12 @@ export function updateCommand(program: Command, currentVersion: string) {
           });
           console.log();
         }
+
+        // Invalidate the update cache so the notification stops showing
+        try {
+          await mkdir(CACHE_DIR, { recursive: true });
+          await writeFile(CACHE_FILE, JSON.stringify({ lastChecked: Date.now(), latestVersion: latest }));
+        } catch { /* non-critical */ }
 
         console.log(
           chalk.green('  ✓ Updated to ') + chalk.bold(`v${latest}`) +

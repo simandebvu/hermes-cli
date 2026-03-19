@@ -29,7 +29,14 @@ export async function getRepoState(): Promise<RepoState> {
       mergeStatus,
       cherryPickStatus,
     ] = await Promise.all([
-      execAsync('git rev-parse --abbrev-ref HEAD').then((r) => r.stdout.trim()),
+      execAsync('git rev-parse --abbrev-ref HEAD')
+        .then((r) => r.stdout.trim())
+        .catch(() =>
+          // Empty repo (no commits yet) — fall back to reading the branch name from HEAD
+          execAsync('git symbolic-ref --short HEAD')
+            .then((r) => r.stdout.trim())
+            .catch(() => 'main')
+        ),
       execAsync('git status --porcelain').then((r) => r.stdout.trim()),
       execAsync('git rev-parse --abbrev-ref @{upstream}')
         .then((r) => r.stdout.trim())

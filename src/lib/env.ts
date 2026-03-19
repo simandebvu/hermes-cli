@@ -6,7 +6,7 @@ import chalk from 'chalk';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-export type Provider = 'anthropic' | 'openai' | 'gemini';
+export type Provider = 'anthropic' | 'openai' | 'gemini' | 'claude-code' | 'codex';
 
 export interface ResolvedEnv {
   provider: Provider | null;
@@ -124,7 +124,7 @@ export async function getResolvedEnv(): Promise<ResolvedEnvWithSources> {
     return { value: null, source: null as EnvSource };
   })();
 
-  const validProviders: Provider[] = ['anthropic', 'openai', 'gemini'];
+  const validProviders: Provider[] = ['anthropic', 'openai', 'gemini', 'claude-code', 'codex'];
   const provider = validProviders.includes(rawProvider.value as Provider)
     ? (rawProvider.value as Provider)
     : null;

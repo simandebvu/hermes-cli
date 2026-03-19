@@ -292,11 +292,12 @@ async function interactiveConfig(repoInfo: { currentBranch: string }): Promise<H
 }
 
 const GITIGNORE_ENTRIES = [
-  { pattern: '.env',           comment: null },
-  { pattern: '.env.*',         comment: null },
-  { pattern: '!.env.example',  comment: null },
+  { pattern: '.env',             comment: null },
+  { pattern: '.env.*',           comment: null },
+  { pattern: '!.env.example',    comment: null },
   { pattern: '.hermes/backups/', comment: null },
   { pattern: '.hermes/stats.json', comment: null },
+  { pattern: '.hermes/plans/',   comment: null },
 ];
 
 async function updateGitignore(): Promise<string[]> {

@@ -12,8 +12,9 @@ import {
   type Provider,
   type GlobalConfig,
 } from '../lib/env.js';
+import { isClaudeCodeAvailable, isCodexAvailable } from '../lib/ai.js';
 
-const VALID_PROVIDERS: Provider[] = ['anthropic', 'openai', 'gemini'];
+const VALID_PROVIDERS: Provider[] = ['anthropic', 'openai', 'gemini', 'claude-code'];
 
 const KEY_ALIASES: Record<string, keyof GlobalConfig> = {
   'provider':      'provider',
@@ -23,10 +24,10 @@ const KEY_ALIASES: Record<string, keyof GlobalConfig> = {
 };
 
 const KEY_DESCRIPTIONS: Record<keyof GlobalConfig, string> = {
-  provider:       'Default AI provider (anthropic | openai | gemini)',
+  provider:        'Default AI provider (anthropic | openai | gemini | claude-code)',
   anthropicApiKey: 'Anthropic API key',
-  openaiApiKey:   'OpenAI API key',
-  geminiApiKey:   'Gemini API key',
+  openaiApiKey:    'OpenAI API key',
+  geminiApiKey:    'Gemini API key',
 };
 
 export function configCommand(program: Command) {
@@ -158,21 +159,38 @@ export function configCommand(program: Command) {
       console.log(chalk.dim(`  ${GLOBAL_CONFIG_PATH}\n`));
 
       const globalConfig = await loadGlobalConfig();
-
-      const { provider } = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'provider',
-          message: 'Which AI provider do you want to use?',
-          choices: [
-            { name: 'Anthropic (Claude)', value: 'anthropic' },
-            { name: 'OpenAI (GPT-4o)', value: 'openai' },
-            { name: 'Google (Gemini)', value: 'gemini' },
-            { name: 'Auto-detect (use whichever key is available)', value: '' },
-          ],
-          default: globalConfig.provider || '',
-        },
+      const [claudeAvailable, codexAvailable] = await Promise.all([
+        isClaudeCodeAvailable(),
+        isCodexAvailable(),
       ]);
+
+      const cliChoices = [
+        claudeAvailable
+          ? { name: `Claude Code CLI ${chalk.green('(detected)')}`, value: 'claude-code' }
+          : { name: `Claude Code CLI ${chalk.dim('(not found)')}`, value: 'claude-code', disabled: true },
+        codexAvailable
+          ? { name: `OpenAI Codex CLI ${chalk.green('(detected)')}`, value: 'codex' }
+          : { name: `OpenAI Codex CLI ${chalk.dim('(not found)')}`, value: 'codex', disabled: true },
+      ];
+
+      const providerChoices = [
+        ...cliChoices,
+        { name: 'Anthropic API  (ANTHROPIC_API_KEY)', value: 'anthropic' },
+        { name: 'OpenAI API     (OPENAI_API_KEY)', value: 'openai' },
+        { name: 'Google Gemini  (GEMINI_API_KEY)', value: 'gemini' },
+        { name: 'Auto-detect    (use whichever is available)', value: '' },
+      ];
+
+      const defaultProvider = globalConfig.provider
+        || (claudeAvailable ? 'claude-code' : codexAvailable ? 'codex' : '');
+
+      const { provider } = await inquirer.prompt([{
+        type: 'list',
+        name: 'provider',
+        message: 'Which AI provider do you want to use?',
+        choices: providerChoices,
+        default: defaultProvider,
+      }]);
 
       if (provider) {
         globalConfig.provider = provider as Provider;
@@ -180,34 +198,42 @@ export function configCommand(program: Command) {
         delete globalConfig.provider;
       }
 
-      // Prompt for keys based on selection, or all if auto-detect
-      const askProviders = provider ? [provider] : VALID_PROVIDERS;
+      // CLI providers need no key — skip straight to save
+      if (provider === 'claude-code' || provider === 'codex') {
+        await saveGlobalConfig(globalConfig);
+        const label = provider === 'claude-code' ? 'claude CLI' : 'codex CLI';
+        console.log(`\n  ${chalk.green('✓')} Provider set to ${chalk.cyan(provider)}`);
+        console.log(chalk.dim(`  Hermes will use the ${label} — no API key required.\n`));
+        return;
+      }
 
-      const keyPrompts: Record<Provider, { field: keyof GlobalConfig; envVar: string; hint: string }> = {
+      // Prompt for keys based on selection, or all if auto-detect
+      const apiProviders: Array<'anthropic' | 'openai' | 'gemini'> =
+        provider ? [provider as 'anthropic' | 'openai' | 'gemini'] : ['anthropic', 'openai', 'gemini'];
+
+      const keyPrompts: Record<'anthropic' | 'openai' | 'gemini', { field: keyof GlobalConfig; envVar: string; hint: string }> = {
         anthropic: { field: 'anthropicApiKey', envVar: 'ANTHROPIC_API_KEY', hint: 'sk-ant-...' },
         openai:    { field: 'openaiApiKey',    envVar: 'OPENAI_API_KEY',    hint: 'sk-...'     },
         gemini:    { field: 'geminiApiKey',    envVar: 'GEMINI_API_KEY',    hint: 'AIza...'    },
       };
 
-      for (const p of askProviders as Provider[]) {
+      for (const p of apiProviders) {
         const { field, envVar, hint } = keyPrompts[p];
         const existing = globalConfig[field] as string | undefined;
         const fromEnv = process.env[envVar];
 
         if (fromEnv) {
-          console.log(chalk.dim(`  ${envVar} already set in environment, skipping.`));
+          console.log(chalk.dim(`  ${envVar} already set in environment — skipping.`));
           continue;
         }
 
-        const { key } = await inquirer.prompt([
-          {
-            type: 'password',
-            name: 'key',
-            message: `${p.charAt(0).toUpperCase() + p.slice(1)} API key (${hint}):`,
-            default: existing ? '(keep existing)' : '',
-            mask: '*',
-          },
-        ]);
+        const { key } = await inquirer.prompt([{
+          type: 'password',
+          name: 'key',
+          message: `${p.charAt(0).toUpperCase() + p.slice(1)} API key (${hint}):`,
+          default: existing ? '(keep existing)' : '',
+          mask: '*',
+        }]);
 
         if (key && key !== '(keep existing)') {
           (globalConfig as any)[field] = key;
@@ -216,7 +242,7 @@ export function configCommand(program: Command) {
 
       await saveGlobalConfig(globalConfig);
 
-      console.log(`\n${chalk.green('✓')} Configuration saved to ${chalk.dim(GLOBAL_CONFIG_PATH)}`);
+      console.log(`\n  ${chalk.green('✓')} Configuration saved to ${chalk.dim(GLOBAL_CONFIG_PATH)}`);
       console.log(chalk.dim('  File permissions set to 600 (owner read/write only)\n'));
       console.log(`  Run ${chalk.cyan('hermes config list')} to verify your setup.`);
       console.log();

@@ -18,7 +18,9 @@ import { checkForUpdates, enforceMinimumVersion } from './lib/update-notifier.js
 import { printBanner, printWorkflows } from './lib/banner.js';
 
 const program = new Command();
-const CURRENT_VERSION = '0.3.6';
+import { createRequire } from 'module';
+const __require = createRequire(import.meta.url);
+const { version: CURRENT_VERSION } = __require('../package.json');
 
 program
   .name('hermes')
